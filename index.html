@@ -441,6 +441,7 @@ function LogoDropZone({logo,setLogo}){
 // ── INVOICE ───────────────────────────────────────────────────────────────────
 function InvoicePrint({order:o,onClose,onSave}){
   const[logo,setLogo]=useState(null);
+  const[orderImages,setOrderImages]=useState([]);
   const[edits,setEdits]=useState({
     invoiceNum:o.invoiceNum||`PL${String(o.seq).padStart(3,"0")}`,
     clientName:o.clientName,phone:o.phone||"",address:o.address||"",
@@ -456,8 +457,17 @@ function InvoicePrint({order:o,onClose,onSave}){
   const grandTotal=edits.deliveryPaid?rev:rev+dc;
   const handleSave=()=>onSave({id:o.id,...edits});
 
+  const addImages=(files)=>{
+    Array.from(files).forEach(file=>{
+      if(!file.type.startsWith("image/"))return;
+      const r=new FileReader();
+      r.onload=e=>setOrderImages(prev=>[...prev,{id:uid(),src:e.target.result,name:file.name}]);
+      r.readAsDataURL(file);
+    });
+  };
+  const removeImage=(id)=>setOrderImages(prev=>prev.filter(img=>img.id!==id));
   const doPrint=()=>{
-    const html=buildInvoiceHTML(edits,rev,dc,grandTotal,logo);
+    const html=buildInvoiceHTML(edits,rev,dc,grandTotal,logo,orderImages);
     const overlay=document.createElement("div");
     overlay.id="__print_overlay__";
     overlay.style.cssText="position:fixed;inset:0;z-index:99999;background:#fff;overflow:auto;";
@@ -547,7 +557,26 @@ function InvoicePrint({order:o,onClose,onSave}){
               <tr style={{background:"#cc0000"}}><td colSpan={3} style={{padding:"12px 20px",color:"#fff",fontWeight:"bold",fontSize:15}}>Total</td><td style={{padding:"12px 16px",textAlign:"right",color:"#fff",fontWeight:"bold",fontSize:15}}>{tk(grandTotal)}</td><td></td></tr>
             </tfoot>
           </table>
-          <div style={{padding:"16px 24px 24px"}}>
+          <div style={{padding:"16px 24px 0"}}>
+            <div style={{fontSize:12,color:"#555",marginBottom:8,fontWeight:"bold",textTransform:"uppercase",letterSpacing:0.5}}>🖼 Order Images (for PDF)</div>
+            <div onDragOver={e=>{e.preventDefault();}} onDrop={e=>{e.preventDefault();addImages(e.dataTransfer.files);}}
+              style={{border:"2px dashed #333",borderRadius:8,padding:"12px",background:"#0d0d0d",marginBottom:10}}>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:orderImages.length>0?10:0}}>
+                {orderImages.map(img=>(
+                  <div key={img.id} style={{position:"relative",width:100,height:100}}>
+                    <img src={img.src} alt={img.name} style={{width:100,height:100,objectFit:"cover",borderRadius:6,border:"1px solid #333"}}/>
+                    <button onClick={()=>removeImage(img.id)} style={{position:"absolute",top:-6,right:-6,background:"#cc0000",border:"none",color:"#fff",borderRadius:"50%",width:20,height:20,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <button onClick={()=>{const i=document.createElement("input");i.type="file";i.accept="image/*";i.multiple=true;i.onchange=e=>addImages(e.target.files);i.click();}}
+                  style={bS("#1a1a1a","#aaa",12,"#333")}>+ Add Images</button>
+                <span style={{color:"#444",fontSize:11}}>or drag & drop · {orderImages.length} image{orderImages.length!==1?"s":""} added</span>
+              </div>
+            </div>
+          </div>
+          <div style={{padding:"0 24px 24px"}}>
             <div style={{fontSize:12,color:"#555",marginBottom:4}}>Notes</div>
             <textarea value={edits.notes} onChange={e=>set("notes",e.target.value)} style={{...iS(),height:52,resize:"vertical",fontSize:13}} placeholder="Any notes for the client…"/>
           </div>
@@ -574,7 +603,7 @@ function InlineEdit({value,onChange,style={},placeholder="",type="text",prefix="
   );
 }
 
-function buildInvoiceHTML(e,rev,dc,grandTotal,logo){
+function buildInvoiceHTML(e,rev,dc,grandTotal,logo,orderImages=[]){
   return`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${e.invoiceNum}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
@@ -629,6 +658,16 @@ function buildInvoiceHTML(e,rev,dc,grandTotal,logo){
     </tfoot>
   </table>
   ${e.notes?`<div class="notes">📝 ${e.notes}</div>`:""}
+  ${orderImages.length>0?`
+  <div style="margin-top:24px;border-top:2px solid #cc0000;padding-top:16px;">
+    <div style="font-size:13px;font-weight:bold;color:#cc0000;margin-bottom:12px;letter-spacing:1px;text-transform:uppercase;">Design Preview</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;">
+      ${orderImages.map(img=>`<div style="text-align:center;">
+        <img src="${img.src}" style="max-width:200px;max-height:200px;object-fit:contain;border:1px solid #eee;border-radius:6px;display:block;"/>
+        <div style="font-size:10px;color:#999;margin-top:4px;">${img.name}</div>
+      </div>`).join("")}
+    </div>
+  </div>`:""}
   <div class="footer">Poster Lagai · Thank you for your business · Generated ${new Date().toLocaleString()}</div>
   </body></html>`;
 }
