@@ -75,7 +75,13 @@ const newProduct=()=>({id:uid(),name:"",qty:"",unitPrice:"",cost:"",manualTotal:
 const productTotal=(p)=>p.manualTotal!==""?parseFloat(p.manualTotal)||0:(parseFloat(p.qty)||0)*(parseFloat(p.unitPrice)||0);
 const orderRevenue=(products=[])=>products.reduce((s,p)=>s+productTotal(p),0);
 const orderCost=(products=[])=>products.reduce((s,p)=>s+(parseFloat(p.cost)||0)*(parseFloat(p.qty)||1),0);
-const orderProfit=(products=[])=>orderRevenue(products)-orderCost(products);
+const hasCost=(products=[])=>products.some(p=>parseFloat(p.cost)>0);
+const orderProfit=(products=[],deliveryCharge=0,deliveryPaid=false)=>{
+  const rev=orderRevenue(products);
+  const cost=hasCost(products)?orderCost(products):0;
+  const dc=deliveryPaid?0:(parseFloat(deliveryCharge)||0);
+  return rev-cost-dc;
+};
 let nextSeq=1;
 const makeOrder=()=>({
   id:uid(),seq:nextSeq++,clientName:"",phone:"",address:"",
@@ -381,7 +387,7 @@ function OrderCard({order:o,onUpdate,onAdvance,onEdit,onPrint,onDeleteRequest}){
             {o.printDate&&<Info label="Print Date" value={fmtDate(o.printDate)}/>}
             {o.address&&<Info label="Address" value={o.address}/>}
             {o.invoiceNum&&<Info label="Invoice #" value={o.invoiceNum}/>}
-            {(()=>{const cost=orderCost(o.products),profit=orderRevenue(o.products)-cost;return cost>0?<Info label="Profit" value={tk(profit)}/>:null;})()}
+            {(()=>{const cost=orderCost(o.products),profit=orderProfit(o.products,o.deliveryCharge,o.deliveryPaid);return cost>0||true?<Info label="Profit" value={tk(profit)}/>:null;})()}
           </div>
           {dc>0&&(
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"8px 12px",borderRadius:8,background:"#1a1a1a",border:`1px solid ${o.deliveryPaid?"#005500":"#550000"}`}}>
@@ -751,7 +757,7 @@ function OrderForm({draft,setDraft,onSave,onCancel}){
             </div>
           );
         })}
-        {(()=>{const cost=orderCost(draft.products),profit=orderProfit(draft.products);return(
+        {(()=>{const cost=orderCost(draft.products),profit=orderProfit(draft.products,draft.deliveryCharge,draft.deliveryPaid);return(
           <div style={{background:"#1a1a1a",borderRadius:8,padding:"10px 14px",display:"flex",gap:20,fontSize:14,flexWrap:"wrap",fontWeight:"bold"}}>
             <span style={{color:"#888"}}>Revenue: <span style={{color:"#fff"}}>{tk(rev)}</span></span>
             {cost>0&&<span style={{color:"#888"}}>Cost: <span style={{color:"#ff6666"}}>{tk(cost)}</span></span>}
@@ -808,12 +814,12 @@ function PnlView({data,from,to,onFromChange,onToChange,onPrintOrder}){
       {data.orders.length===0
         ?<div style={{textAlign:"center",color:"#333",marginTop:40}}>No delivered orders for this period.</div>
         :data.orders.slice().sort((a,b)=>{
-            const ai=parseInt((a.invoiceNum||"").replace(/\D/g,""))||a.seq||0;
-            const bi=parseInt((b.invoiceNum||"").replace(/\D/g,""))||b.seq||0;
+            const ai=parseInt((a.invoiceNum||"").replace(/\D/g,""))||0;
+            const bi=parseInt((b.invoiceNum||"").replace(/\D/g,""))||0;
             return bi-ai;
           }).map(o=>{
           const rev=orderRevenue(o.products),dc=parseFloat(o.deliveryCharge)||0,grand=o.deliveryPaid?rev:rev+dc;
-          const cost=orderCost(o.products),profit=rev-cost;
+          const cost=orderCost(o.products),profit=orderProfit(o.products,o.deliveryCharge,o.deliveryPaid);
           return(
             <div key={o.id} style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:10,marginBottom:12,overflow:"hidden"}}>
               <div style={{background:"#1a1a1a",padding:"8px 14px",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6,alignItems:"center"}}>
