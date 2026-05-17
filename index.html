@@ -265,7 +265,14 @@ function App(){
     const ms=filterStatus==="All"||o.status===filterStatus;
     const mq=!search||o.clientName.toLowerCase().includes(search.toLowerCase())||o.products.some(p=>p.name.toLowerCase().includes(search.toLowerCase()));
     return ms&&mq;
-  }).slice().reverse();
+  }).slice().sort((a,b)=>{
+    if(filterStatus==="Delivered"){
+      const ai=parseInt((a.invoiceNum||"").replace(/\D/g,""))||0;
+      const bi=parseInt((b.invoiceNum||"").replace(/\D/g,""))||0;
+      return bi-ai;
+    }
+    return (b.seq||0)-(a.seq||0);
+  });
 
   const printDueToday=orders.filter(o=>o.printDate===todayStr()&&o.status==="Confirmed");
 
