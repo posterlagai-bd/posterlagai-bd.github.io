@@ -77,19 +77,20 @@ const productTotal=(p)=>p.manualTotal!==""?parseFloat(p.manualTotal)||0:(parseFl
 const orderRevenue=(products=[])=>products.reduce((s,p)=>s+productTotal(p),0);
 const orderCost=(products=[])=>products.reduce((s,p)=>s+(parseFloat(p.cost)||0)*(parseFloat(p.qty)||1),0);
 const hasCost=(products=[])=>products.some(p=>parseFloat(p.cost)>0);
-const orderProfit=(products=[],deliveryCharge=0,deliveryPaid=false)=>{
+const orderProfit=(products=[],deliveryCharge=0,deliveryPaid=false,actualDC="")=>{
   const rev=orderRevenue(products);
   const dc=parseFloat(deliveryCharge)||0;
   const grandTotal=deliveryPaid?rev:rev+dc;
   const cost=hasCost(products)?orderCost(products):0;
-  return grandTotal-cost-dc;
+  const realDC=parseFloat(actualDC)||0;
+  return grandTotal-cost-realDC;
 };
 let nextSeq=1;
 const makeOrder=()=>({
   id:uid(),seq:nextSeq++,clientName:"",phone:"",address:"",
   orderDate:todayStr(),deliveryDate:"",printDate:"",printDaysBefore:"",
   status:"Talking",products:[newProduct()],notes:"",
-  deliveryCharge:"",deliveryPaid:false,paymentMethod:"COD",
+  deliveryCharge:"",actualDC:"",deliveryPaid:false,paymentMethod:"COD",
   history:[`${todayStr()}: Order created`],expanded:false,  invoiceNum:`PL${String(nextSeq-1).padStart(5,"0")}`,
 });
 
@@ -260,7 +261,7 @@ function App(){
     const revenue=mo.reduce((s,o)=>s+orderRevenue(o.products),0);
     const delivery=mo.reduce((s,o)=>s+(parseFloat(o.deliveryCharge)||0),0);
     const totalCost=mo.reduce((s,o)=>s+orderCost(o.products),0);
-    const profit=mo.reduce((s,o)=>s+orderProfit(o.products,o.deliveryCharge,o.deliveryPaid),0);
+    const profit=mo.reduce((s,o)=>s+orderProfit(o.products,o.deliveryCharge,o.deliveryPaid,o.actualDC),0);
     return{orders:mo,revenue,delivery,total:revenue+delivery,totalCost,profit};
   },[orders,pnlFrom,pnlTo]);
 
@@ -397,7 +398,7 @@ function OrderCard({order:o,onUpdate,onAdvance,onEdit,onPrint,onDeleteRequest}){
             {o.printDate&&<Info label="Print Date" value={fmtDate(o.printDate)}/>}
             {o.address&&<Info label="Address" value={o.address}/>}
             {o.invoiceNum&&<Info label="Invoice #" value={o.invoiceNum}/>}
-            {(()=>{const cost=orderCost(o.products),profit=orderProfit(o.products,o.deliveryCharge,o.deliveryPaid);return cost>0||true?<Info label="Profit" value={tk(profit)}/>:null;})()}
+            {(()=>{const cost=orderCost(o.products),profit=orderProfit(o.products,o.deliveryCharge,o.deliveryPaid,o.actualDC);return cost>0||true?<Info label="Profit" value={tk(profit)}/>:null;})()}
           </div>
           {dc>0&&(
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"8px 12px",borderRadius:8,background:"#1a1a1a",border:`1px solid ${o.deliveryPaid?"#005500":"#550000"}`}}>
@@ -462,7 +463,7 @@ function InvoicePrint({order:o,onClose,onSave}){
     invoiceNum:o.invoiceNum||`PL${String(o.seq).padStart(3,"0")}`,
     clientName:o.clientName,phone:o.phone||"",address:o.address||"",
     orderDate:o.orderDate,paymentMethod:o.paymentMethod||"COD",notes:o.notes||"",
-    deliveryCharge:o.deliveryCharge||"",deliveryPaid:o.deliveryPaid||false,
+    deliveryCharge:o.deliveryCharge||"",actualDC:o.actualDC||"",deliveryPaid:o.deliveryPaid||false,
     products:o.products.map(p=>({...p})),
   });
   const set=(k,v)=>setEdits(e=>({...e,[k]:v}));
@@ -559,6 +560,9 @@ function InvoicePrint({order:o,onClose,onSave}){
                     <InlineEdit value={edits.deliveryCharge} onChange={v=>set("deliveryCharge",v)} style={{color:"#aaa",width:80}} placeholder="0.00" type="number"/>
                     <button onClick={()=>set("deliveryPaid",false)} style={{...bS(!edits.deliveryPaid?"#550000":"#1a1a1a",!edits.deliveryPaid?"#ff6666":"#555",11,!edits.deliveryPaid?"#880000":"#333"),padding:"3px 10px"}}>Unpaid</button>
                     <button onClick={()=>set("deliveryPaid",true)}  style={{...bS(edits.deliveryPaid?"#003300":"#1a1a1a",edits.deliveryPaid?"#44cc44":"#555",11,edits.deliveryPaid?"#005500":"#333"),padding:"3px 10px"}}>Paid</button>
+                    <span style={{color:"#444",fontSize:11,marginLeft:8}}>|</span>
+                    <span style={{color:"#555",fontSize:13}}>Actual DC:</span>
+                    <InlineEdit value={edits.actualDC} onChange={v=>set("actualDC",v)} style={{color:"#ffaa00",width:80}} placeholder="same" type="number"/>
                   </div>
                 </td>
                 <td style={{padding:"10px 16px",textAlign:"right",color:"#888",fontSize:13}}>{dc>0&&!edits.deliveryPaid?tk(dc):"—"}</td>
@@ -721,7 +725,7 @@ function OrderForm({draft,setDraft,onSave,onCancel}){
         </div>
       </Sec>
       <Sec title="💳 Payment">
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,alignItems:"end"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,alignItems:"end"}}>
           <Field label="Method">
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               {PAYMENT_METHODS.map(m=>(
@@ -731,6 +735,7 @@ function OrderForm({draft,setDraft,onSave,onCancel}){
             </div>
           </Field>
           <Field label="Delivery Charge (BDT)"><input type="number" min={0} step="0.01" style={iS()} value={draft.deliveryCharge} onChange={e=>set("deliveryCharge",e.target.value)} placeholder="0.00"/></Field>
+          <Field label={<span style={{color:"#ffaa00"}}>Actual DC (BDT)</span>}><input type="number" min={0} step="0.01" style={iS({borderColor:"#664400",background:draft.actualDC!==""?"#1a1200":"#111"})} value={draft.actualDC} onChange={e=>set("actualDC",e.target.value)} placeholder="same as DC"/></Field>
           <Field label="Delivery Payment">
             <div style={{display:"flex",gap:6}}>
               <button type="button" onClick={()=>set("deliveryPaid",false)} style={{...bS(!draft.deliveryPaid?"#550000":"#1a1a1a",!draft.deliveryPaid?"#ff6666":"#555",12,!draft.deliveryPaid?"#880000":"#333"),flex:1,padding:"7px 0"}}>❌ Unpaid</button>
@@ -762,7 +767,7 @@ function OrderForm({draft,setDraft,onSave,onCancel}){
             </div>
           );
         })}
-        {(()=>{const cost=orderCost(draft.products),profit=orderProfit(draft.products,draft.deliveryCharge,draft.deliveryPaid);return(
+        {(()=>{const cost=orderCost(draft.products),profit=orderProfit(draft.products,draft.deliveryCharge,draft.deliveryPaid,draft.actualDC);return(
           <div style={{background:"#1a1a1a",borderRadius:8,padding:"10px 14px",display:"flex",gap:20,fontSize:14,flexWrap:"wrap",fontWeight:"bold"}}>
             <span style={{color:"#888"}}>Revenue: <span style={{color:"#fff"}}>{tk(rev)}</span></span>
             {cost>0&&<span style={{color:"#888"}}>Cost: <span style={{color:"#ff6666"}}>{tk(cost)}</span></span>}
@@ -824,7 +829,7 @@ function PnlView({data,from,to,onFromChange,onToChange,onPrintOrder}){
             return bi-ai;
           }).map(o=>{
           const rev=orderRevenue(o.products),dc=parseFloat(o.deliveryCharge)||0,grand=o.deliveryPaid?rev:rev+dc;
-          const cost=orderCost(o.products),profit=orderProfit(o.products,o.deliveryCharge,o.deliveryPaid);
+          const cost=orderCost(o.products),profit=orderProfit(o.products,o.deliveryCharge,o.deliveryPaid,o.actualDC);
           return(
             <div key={o.id} style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:10,marginBottom:12,overflow:"hidden"}}>
               <div style={{background:"#1a1a1a",padding:"8px 14px",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6,alignItems:"center"}}>
