@@ -79,9 +79,10 @@ const orderCost=(products=[])=>products.reduce((s,p)=>s+(parseFloat(p.cost)||0)*
 const hasCost=(products=[])=>products.some(p=>parseFloat(p.cost)>0);
 const orderProfit=(products=[],deliveryCharge=0,deliveryPaid=false)=>{
   const rev=orderRevenue(products);
+  const dc=parseFloat(deliveryCharge)||0;
+  const grandTotal=rev+dc;
   const cost=hasCost(products)?orderCost(products):0;
-  const dc=deliveryPaid?0:(parseFloat(deliveryCharge)||0);
-  return hasCost(products)?rev-cost-dc:rev-dc;
+  return grandTotal-cost-dc;
 };
 let nextSeq=1;
 const makeOrder=()=>({
@@ -764,7 +765,7 @@ function OrderForm({draft,setDraft,onSave,onCancel}){
           <div style={{background:"#1a1a1a",borderRadius:8,padding:"10px 14px",display:"flex",gap:20,fontSize:14,flexWrap:"wrap",fontWeight:"bold"}}>
             <span style={{color:"#888"}}>Revenue: <span style={{color:"#fff"}}>{tk(rev)}</span></span>
             {cost>0&&<span style={{color:"#888"}}>Cost: <span style={{color:"#ff6666"}}>{tk(cost)}</span></span>}
-            {cost>0&&<span style={{color:"#888"}}>Profit: <span style={{color:profit>=0?"#44cc44":"#cc4444"}}>{tk(profit)}</span></span>}
+            <span style={{color:"#888"}}>Profit: <span style={{color:profit>=0?"#44cc44":"#cc4444"}}>{tk(profit)}</span></span>
             {dc>0&&<span style={{color:"#888"}}>Delivery: <span style={{color:draft.deliveryPaid?"#44cc44":"#cc4444"}}>{tk(dc)}</span></span>}
             <span style={{color:"#888"}}>Grand Total: <span style={{color:"#cc0000"}}>{tk(grandTotal)}</span></span>
           </div>
@@ -830,7 +831,7 @@ function PnlView({data,from,to,onFromChange,onToChange,onPrintOrder}){
                 <div style={{display:"flex",gap:10,alignItems:"center",fontSize:12,flexWrap:"wrap"}}>
                   <span style={{color:"#666"}}>{o.paymentMethod}</span>
                   {cost>0&&<span style={{color:"#aaa"}}>Cost: {tk(cost)}</span>}
-                  {cost>0&&<span style={{color:profit>=0?"#44cc44":"#cc4444"}}>Profit: {tk(profit)}</span>}
+                  <span style={{color:profit>=0?"#44cc44":"#cc4444"}}>Profit: {tk(profit)}</span>
                   {dc>0&&<span style={{color:o.deliveryPaid?"#44cc44":"#cc4444"}}>🚚 {tk(dc)} {o.deliveryPaid?"Paid":"Unpaid"}</span>}
                   <span style={{color:"#cc0000",fontWeight:"bold"}}>Total: {tk(grand)}</span>
                   <button onClick={()=>onPrintOrder(o)} style={bS("#1a1a1a","#fff",11,"#333")}>🖨️ Invoice</button>
