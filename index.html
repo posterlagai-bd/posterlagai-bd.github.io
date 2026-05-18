@@ -80,7 +80,7 @@ const hasCost=(products=[])=>products.some(p=>parseFloat(p.cost)>0);
 const orderProfit=(products=[],deliveryCharge=0,deliveryPaid=false)=>{
   const rev=orderRevenue(products);
   const dc=parseFloat(deliveryCharge)||0;
-  const grandTotal=rev+dc;
+  const grandTotal=deliveryPaid?rev:rev+dc;
   const cost=hasCost(products)?orderCost(products):0;
   return grandTotal-cost-dc;
 };
@@ -260,7 +260,8 @@ function App(){
     const revenue=mo.reduce((s,o)=>s+orderRevenue(o.products),0);
     const delivery=mo.reduce((s,o)=>s+(parseFloat(o.deliveryCharge)||0),0);
     const totalCost=mo.reduce((s,o)=>s+orderCost(o.products),0);
-    return{orders:mo,revenue,delivery,total:revenue+delivery,totalCost,profit:revenue-totalCost};
+    const profit=mo.reduce((s,o)=>s+orderProfit(o.products,o.deliveryCharge,o.deliveryPaid),0);
+    return{orders:mo,revenue,delivery,total:revenue+delivery,totalCost,profit};
   },[orders,pnlFrom,pnlTo]);
 
   const visible=orders.filter(o=>{
