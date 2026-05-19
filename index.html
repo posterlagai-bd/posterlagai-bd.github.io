@@ -79,11 +79,9 @@ const orderCost=(products=[])=>products.reduce((s,p)=>s+(parseFloat(p.cost)||0)*
 const hasCost=(products=[])=>products.some(p=>parseFloat(p.cost)>0);
 const orderProfit=(products=[],deliveryCharge=0,deliveryPaid=false,actualDC="")=>{
   const rev=orderRevenue(products);
-  const dc=parseFloat(deliveryCharge)||0;
-  const grandTotal=deliveryPaid?rev:rev+dc;
   const cost=hasCost(products)?orderCost(products):0;
   const realDC=parseFloat(actualDC)||0;
-  return grandTotal-cost-realDC;
+  return rev-cost-realDC;
 };
 let nextSeq=1;
 const makeOrder=()=>({
@@ -262,7 +260,8 @@ function App(){
     const delivery=mo.reduce((s,o)=>s+(parseFloat(o.deliveryCharge)||0),0);
     const totalCost=mo.reduce((s,o)=>s+orderCost(o.products),0);
     const profit=mo.reduce((s,o)=>s+orderProfit(o.products,o.deliveryCharge,o.deliveryPaid,o.actualDC),0);
-    return{orders:mo,revenue,delivery,total:revenue+delivery,totalCost,profit};
+    const grandTotal=mo.reduce((s,o)=>{const rev=orderRevenue(o.products);const dc=parseFloat(o.deliveryCharge)||0;return s+(o.deliveryPaid?rev:rev+dc);},0);
+    return{orders:mo,revenue,delivery,total:grandTotal,totalCost,profit};
   },[orders,pnlFrom,pnlTo]);
 
   const visible=orders.filter(o=>{
