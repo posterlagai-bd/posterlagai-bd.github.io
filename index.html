@@ -111,8 +111,9 @@ const hasCost=(products=[])=>products.some(p=>parseFloat(p.cost)>0);
 const orderProfit=(products=[],deliveryCharge=0,deliveryPaid=false,actualDC="")=>{
   const rev=orderRevenue(products);
   const cost=hasCost(products)?orderCost(products):0;
+  const dc=parseFloat(deliveryCharge)||0;
   const realDC=parseFloat(actualDC)||0;
-  return rev-cost-realDC;
+  return rev+(dc-realDC)-cost;
 };
 let nextSeq=1;
 const makeOrder=()=>({
@@ -143,40 +144,6 @@ const deleteExpenseFromFS=async(id)=>{
   const fs=getFS();
   await fs.deleteDoc(fs.doc("expenses",id));
 };
-
-// ─── STEADFAST API ───────────────────────────────────────────────────────────
-// Calls our Cloudflare Worker backend — no CORS issues, no proxy tricks needed
-const STEADFAST_WORKER_URL = "https://posterlagaixsteadfast.posterlagai.workers.dev";
-
-async function placeStadfastOrder(order) {
-  const codAmount = (() => {
-    const rev = orderRevenue(order.products);
-    const dc  = parseFloat(order.deliveryCharge) || 0;
-    return order.deliveryPaid ? rev : rev + dc;
-  })();
-
-  const body = {
-    invoice:           order.invoiceNum || order.id,
-    recipient_name:    order.clientName,
-    recipient_phone:   order.phone || "",
-    recipient_address: order.address || "",
-    cod_amount:        codAmount,
-    note:              order.notes || "",
-  };
-
-  const res = await fetch(STEADFAST_WORKER_URL, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`HTTP ${res.status}: ${text}`);
-  }
-
-  return res.json();
-}
 
 // ─── EXPENSE TRACKER ─────────────────────────────────────────────────────────
 function ExpenseTracker({canEdit}){
@@ -1047,7 +1014,6 @@ function OrderCard({order:o,onUpdate,onAdvance,onEdit,onPrint,onDeleteRequest}){
           <span style={{background:sc.bg,color:sc.text,border:`1px solid ${sc.border}`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:"bold"}}>{o.status}</span>
           <span style={{background:"#1a1a1a",border:"1px solid #333",color:"#aaa",borderRadius:20,padding:"3px 10px",fontSize:11}}>{o.paymentMethod||"COD"}</span>
           {dc>0&&<span style={{background:o.deliveryPaid?"#0a2a0a":"#2a0a0a",color:o.deliveryPaid?"#44cc44":"#cc4444",border:`1px solid ${o.deliveryPaid?"#005500":"#550000"}`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:"bold"}}>🚚 {tk(dc)} {o.deliveryPaid?"Paid":"Unpaid"}</span>}
-          {o.steadfastTracking&&<span style={{background:"#001833",border:"1px solid #003366",color:"#4488ff",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:"bold"}}>📦 SF: {o.steadfastTracking}</span>}
           <span style={{color:"#fff",fontSize:13,fontWeight:"bold"}}>Total: {tk(grandTotal)}</span>
           {o.deliveryDate&&<span style={{color:"#555",fontSize:12}}>Del: {fmtDate(o.deliveryDate)}</span>}
         </div>
@@ -1351,29 +1317,6 @@ function OrderForm({draft,setDraft,onSave,onCancel}){
   const remProd=(pid)=>setDraft(d=>({...d,products:d.products.filter(p=>p.id!==pid)}));
   const rev=orderRevenue(draft.products),dc=parseFloat(draft.deliveryCharge)||0;
   const grandTotal=draft.deliveryPaid?rev:rev+dc;
-  const[sfStatus,setSfStatus]=useState(null);
-  const[sfMsg,setSfMsg]=useState("");
-  const handleSteadfast=async()=>{
-    if(!draft.clientName.trim()){alert("Please enter a client name first.");return;}
-    if(!draft.phone.trim()){alert("Please enter a phone number first.");return;}
-    if(!draft.address.trim()){alert("Please enter a delivery address first.");return;}
-    setSfStatus("loading");setSfMsg("");
-    try{
-      const result=await placeStadfastOrder(draft);
-      if(result.status===200||result.status===201||result.consignment){
-        const tracking=result.consignment?.tracking_code||result.tracking_code||"";
-        setDraft(d=>({...d,steadfastTracking:tracking,steadfastConsignment:result.consignment?.consignment_id||""}));
-        setSfStatus("success");
-        setSfMsg(`✅ Order placed! Tracking: ${tracking||"(check Steadfast portal)"}`);
-      }else{
-        setSfStatus("error");
-        setSfMsg(`❌ ${result.message||JSON.stringify(result)}`);
-      }
-    }catch(err){
-      setSfStatus("error");
-      setSfMsg(`❌ Error: ${err.message}`);
-    }
-  };
   return(
     <div>
       <h2 style={{margin:"0 0 14px",fontSize:17,color:"#fff"}}>{draft.history?.length>1?"✏️ Edit Order":"📦 New Order"}</h2>
@@ -1457,29 +1400,6 @@ function OrderForm({draft,setDraft,onSave,onCancel}){
         );})()}
       </Sec>
       <Field label="Notes"><textarea style={{...iS(),height:52,resize:"vertical"}} value={draft.notes} onChange={e=>set("notes",e.target.value)} placeholder="Client notes, special instructions…"/></Field>
-
-      {/* ── STEADFAST SECTION ── */}
-      <Sec title="🚚 Steadfast Courier">
-        {draft.steadfastTracking?(
-          <div style={{background:"#0a2a0a",border:"1px solid #005500",borderRadius:8,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-            <span style={{color:"#44cc44",fontSize:13,fontWeight:"bold"}}>✅ Already sent to Steadfast</span>
-            <span style={{color:"#888",fontSize:12}}>Tracking: <strong style={{color:"#44cc44"}}>{draft.steadfastTracking}</strong></span>
-          </div>
-        ):null}
-        <div style={{fontSize:12,color:"#555",marginBottom:10}}>Requires: Client Name, Phone & Address filled in above.</div>
-        <button
-          onClick={handleSteadfast}
-          disabled={sfStatus==="loading"}
-          style={{...bS(sfStatus==="loading"?"#222":sfStatus==="success"?"#003300":"#003366",sfStatus==="loading"?"#666":sfStatus==="success"?"#44cc44":"#4488ff",13,sfStatus==="loading"?"#333":sfStatus==="success"?"#005500":"#003388"),padding:"9px 20px",opacity:sfStatus==="loading"?0.7:1,cursor:sfStatus==="loading"?"not-allowed":"pointer"}}>
-          {sfStatus==="loading"?"⏳ Placing order…":"🚚 Place Steadfast Delivery"}
-        </button>
-        {sfMsg&&(
-          <div style={{marginTop:10,background:sfStatus==="success"?"rgba(0,80,0,0.2)":"rgba(80,0,0,0.2)",border:`1px solid ${sfStatus==="success"?"#005500":"#550000"}`,borderRadius:6,padding:"8px 12px",fontSize:13,color:sfStatus==="success"?"#44cc44":"#ff6666"}}>
-            {sfMsg}
-          </div>
-        )}
-      </Sec>
-
       <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"flex-end"}}>
         <button onClick={onCancel} style={bS("#1a1a1a","#888",13,"#333")}>Cancel</button>
         <button onClick={onSave} style={bS("#cc0000","#fff")}>💾 Save Order</button>
