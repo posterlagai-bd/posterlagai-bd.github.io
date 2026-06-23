@@ -119,14 +119,13 @@ const orderProfit=(products=[],deliveryCharge=0,deliveryPaid=false,actualDC="")=
   const cost=hasCost(products)?orderCost(products):0;
   return rev+orderSaveFromDC(deliveryCharge,actualDC)-cost;
 };
-let nextSeq=1;
-const makeOrder=()=>({
-  id:uid(),seq:nextSeq++,clientName:"",phone:"",address:"",
+const makeOrder=(seq)=>({
+  id:uid(),seq:seq,clientName:"",phone:"",address:"",
   orderDate:todayStr(),deliveryDate:"",printDate:"",printDaysBefore:"",
   status:"Talking",products:[newProduct()],notes:"",
   deliveryCharge:"",actualDC:"",deliveryPaid:false,paymentMethod:"COD",
   expanded:false,
-  invoiceNum:`PL${String(nextSeq-1).padStart(5,"0")}`,
+  invoiceNum:`PL${String(seq).padStart(5,"0")}`,
 });
 
 const getFS=()=>window.__firestore;
@@ -703,6 +702,7 @@ function App(){
   const[user,setUser]=useState(null);
   const[printOrder,setPrintOrder]=useState(null);
   const[confirmDelete,setConfirmDelete]=useState(null);
+  const nextSeqRef=React.useRef(1);
 
   // ── BACK BUTTON SUPPORT ──
   const pushNav=(state)=>{window.history.pushState(state,"","");};
@@ -762,7 +762,7 @@ function App(){
       const docs=snapshot.docs.map(d=>({expanded:false,...d.data()}));
       docs.sort((a,b)=>(a.seq||0)-(b.seq||0));
       const maxSeq=docs.reduce((m,o)=>Math.max(m,o.seq||0),0);
-      nextSeq=maxSeq+1;
+      nextSeqRef.current=maxSeq+1;
       setOrders(docs);
       setLoaded(true);
     },(err)=>{
@@ -895,7 +895,7 @@ function App(){
           <>
             <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
               <input placeholder="Search client or product…" value={search} onChange={e=>setSearch(e.target.value)} style={iS({flex:1,minWidth:150})}/>
-              <button onClick={()=>navToForm(makeOrder())} style={bS("#cc0000","#fff")}>+ New Order</button>
+              <button onClick={()=>navToForm(makeOrder(nextSeqRef.current))} style={bS("#cc0000","#fff")}>+ New Order</button>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
               {STATUS_FLOW.map(s=>{
